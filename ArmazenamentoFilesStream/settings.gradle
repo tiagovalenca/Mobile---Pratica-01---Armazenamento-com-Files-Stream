@@ -1,0 +1,2 @@
+rootProject.name = "Armazenamento Files Stream"
+include ':app'
