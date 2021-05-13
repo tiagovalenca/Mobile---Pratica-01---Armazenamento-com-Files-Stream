@@ -24,7 +24,6 @@ class ViewModelFile : ViewModel() {
         files?.forEach {
             tempList.add(File(it))
         }
-
         fileList.value = tempList
     }
 }

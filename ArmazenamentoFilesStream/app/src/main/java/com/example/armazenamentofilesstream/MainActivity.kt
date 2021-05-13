@@ -1,6 +1,7 @@
 package com.example.armazenamentofilesstream
 
 import android.Manifest
+import android.app.Activity
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -12,6 +13,7 @@ import androidx.navigation.ui.AppBarConfiguration
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.RadioGroup
 import android.widget.Toast
@@ -22,6 +24,9 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.recyclerview.widget.DefaultItemAnimator
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
+import androidx.security.crypto.EncryptedFile
+import androidx.security.crypto.MasterKey
+import androidx.security.crypto.MasterKeys
 import com.example.armazenamentofilesstream.databinding.ActivityMainBinding
 import java.io.File
 import java.io.FileOutputStream
@@ -64,6 +69,7 @@ class MainActivity : AppCompatActivity() {
             viewModel.firstRun = false
         }
 
+
         initialiseAdapter()
     }
 
@@ -87,6 +93,7 @@ class MainActivity : AppCompatActivity() {
     private fun adapterOnClick(file: File) {
         val intent = Intent(this, FileDetails()::class.java)
         intent.putExtra("fileName", file.name)
+        intent.putExtra("dir", viewModel.filesDir)
         this.startActivityForResult(intent, SECOND_ACTIVITY_REQUEST_CODE)
     }
 
@@ -128,6 +135,23 @@ class MainActivity : AppCompatActivity() {
         recyclerView.adapter?.notifyDataSetChanged()
     }
 
+    fun buildEncrypted(file: File, content : String) {
+        val context : Context = applicationContext
+        val masterKey = MasterKey.Builder(context, MasterKey.DEFAULT_MASTER_KEY_ALIAS).
+                                setKeyScheme(MasterKey.KeyScheme.AES256_GCM).build()
+
+        val encryptedFile = EncryptedFile.Builder(
+            context,
+            file,
+            masterKey,
+            EncryptedFile.FileEncryptionScheme.AES256_GCM_HKDF_4KB
+        ).build()
+
+        encryptedFile.openFileOutput().use { writer ->
+            writer.write(content.toByteArray())
+        }
+    }
+
     fun buttonClickSave(view: View) {
         val fileName = findViewById<EditText>(R.id.fileNameAdd)
         val stringName = fileName.text.toString() + ".txt"
@@ -136,32 +160,48 @@ class MainActivity : AppCompatActivity() {
         val stringContent = content.text.toString()
 
         val radioGroup = findViewById<RadioGroup>(R.id.radioGroup)
-
+        val check = findViewById<CheckBox>(R.id.checkBoxJetPack)
         var selectedOption = -1
         selectedOption = radioGroup!!.checkedRadioButtonId
 
         when(selectedOption){
             R.id.radioInternal -> {
-                openFileOutput(stringName, Context.MODE_PRIVATE).use {
-                    it.write(stringContent.toByteArray())
+                if(!check.isChecked) {
+                    openFileOutput(stringName, Context.MODE_PRIVATE).use {
+                        it.write(stringContent.toByteArray())
+                    }
+                } else {
+                    val file = File(filesDir, stringName)
+                    if(file.exists()){
+                        file.delete()
+                    }
+                    buildEncrypted(file, stringContent)
                 }
+                fileName.text.clear()
+                content.text.clear()
                 viewModel.filesDir = filesDir
                 viewModel.getList()
                 recyclerView.adapter?.notifyDataSetChanged()
-                fileName.text.clear()
-                content.text.clear()
             }
             R.id.radioExternal -> {
                 if(isExternalStorageWritable()){
-                    val extFile = File(getExternalFilesDir("Armazenamento"), stringName)
-                    val file = FileOutputStream(extFile).use { stream ->
-                        stream.write(stringContent.toByteArray())
+                    if(!check.isChecked) {
+                        val extFile = File(getExternalFilesDir("Armazenamento"), stringName)
+                        val file = FileOutputStream(extFile).use { stream ->
+                            stream.write(stringContent.toByteArray())
+                        }
+                    } else {
+                        val file = File(getExternalFilesDir("Armazenamento"), stringName)
+                        if(file.exists()){
+                            file.delete()
+                        }
+                        buildEncrypted(file, stringContent)
                     }
+                    fileName.text.clear()
+                    content.text.clear()
                     viewModel.filesDir = getExternalFilesDir("Armazenamento")!!
                     viewModel.getList()
                     recyclerView.adapter?.notifyDataSetChanged()
-                    fileName.text.clear()
-                    content.text.clear()
                 }
                 else{
                     Toast.makeText(this, "O diretório externo não tem permissão para escrever", Toast.LENGTH_SHORT).show()
